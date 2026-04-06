@@ -12,7 +12,7 @@ df = conn.read(ttl=0)
 
 
     # 清理資料（移除全空的列）
-    df = df.dropna(how="all")
+    #df = df.dropna(how="all")
 except Exception as e:
     st.error(f"連線異常: {e}")
     st.stop()
