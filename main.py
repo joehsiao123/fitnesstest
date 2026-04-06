@@ -5,6 +5,8 @@ from datetime import datetime
 # 1. 從 Secrets 讀取設定
 notion = Client(auth=st.secrets["NOTION_TOKEN"])
 database_id = st.secrets["NOTION_DATABASE_ID"]
+# 這行會印出 Token 的前 10 個字，幫你核對是否為 "secret_..."
+st.write(f"目前偵測到的 Token 開頭為: {st.secrets['NOTION_TOKEN'][:10]}...")
 
 st.set_page_config(page_title="iPad 健康日誌", page_icon="📝")
 st.title("🍎 飲食與運動同步至 Notion")
