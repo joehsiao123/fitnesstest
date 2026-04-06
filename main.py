@@ -13,8 +13,16 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # --- 3. 讀取並處理資料 ---
 try:
     # 讀取資料
-    df = conn.read(spreadsheet=st.secrets["GSHEET_URL"], ttl=0)
+    #df = conn.read(spreadsheet=st.secrets["GSHEET_URL"], ttl=0)
+    # 修改連線方式
+    conn = st.connection("gsheets", type=GSheetsConnection)
     
+    # 讀取時不需要再傳入 spreadsheet URL（它會自動對應 secrets 裡的設定）
+    df = conn.read(ttl=0) 
+    
+    # 寫入時也會變得很順暢
+    conn.update(data=updated_df)
+
     # 清理資料（移除全空的列）
     df = df.dropna(how="all")
 except Exception as e:
