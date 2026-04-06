@@ -1,27 +1,15 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
-import pandas as pd
-from datetime import datetime
 
-# --- 1. 初始化頁面設定 ---
-st.set_page_config(page_title="My Fitness Tracker", layout="wide")
-st.title("🏃 我的健康紀錄助手 (Google Sheets 版)")
-
-# --- 2. 建立連線 ---
+# 建立連線
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- 3. 讀取並處理資料 ---
-try:
-    # 讀取資料
-    #df = conn.read(spreadsheet=st.secrets["GSHEET_URL"], ttl=0)
-    # 修改連線方式
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    
-    # 讀取時不需要再傳入 spreadsheet URL（它會自動對應 secrets 裡的設定）
-    df = conn.read(ttl=0) 
-    
-    # 寫入時也會變得很順暢
-    conn.update(data=updated_df)
+# 讀取（它會自動去 secrets 的 [connections.gsheets] 找 spreadsheet 網址）
+df = conn.read(ttl=0)
+
+# 更新
+# conn.update(data=your_new_df)
+
 
     # 清理資料（移除全空的列）
     df = df.dropna(how="all")
