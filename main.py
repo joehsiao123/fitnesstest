@@ -3,57 +3,105 @@ import requests
 import pandas as pd
 from datetime import datetime
 
-# --- 配置區 ---
-NOTION_TOKEN = "你的_INTEGRATION_TOKEN"
-FOOD_DB_ID = "你的_飲食資料庫_ID"
-
-headers = {
-    "Authorization": f"Bearer {NOTION_TOKEN}",
-    "Content-Type": "application/json",
-    "Notion-Version": "2022-06-28",
-}
-
-# --- 函式：寫入資料到 Notion ---
-def insert_food_record(name, calories, date):
-    url = "https://api.notion.com/v1/pages"
-    data = {
-        "parent": {"database_id": FOOD_DB_ID},
-        "properties": {
-            "Name": {"title": [{"text": {"content": name}}]},
-            "Calories": {"number": calories},
-            "Date": {"date": {"start": date.strftime("%Y-%m-%d")}}
+# --- Notion API 客戶端 ---
+class NotionClient:
+    def __init__(self, token):
+        self.token = token
+        self.headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+            "Notion-Version": "2022-06-28",
         }
-    }
-    res = requests.post(url, headers=headers, json=data)
-    return res.status_code
 
-# --- Streamlit UI 介面 ---
-st.set_page_config(page_title="健身飲食紀錄器", layout="centered")
+    def add_food(self, db_id, name, calories, date):
+        url = "https://api.notion.com/v1/pages"
+        payload = {
+            "parent": {"database_id": db_id},
+            "properties": {
+                "Name": {"title": [{"text": {"content": name}}]},
+                "Calories": {"number": calories},
+                "Date": {"date": {"start": date.strftime("%Y-%m-%d")}}
+            }
+        }
+        return requests.post(url, headers=self.headers, json=payload)
 
-st.title("🍎 飲食與運動紀錄助手")
-st.subheader("串連 Notion 的個人健康看板")
+    def add_workout(self, db_id, activity, duration, date):
+        url = "https://api.notion.com/v1/pages"
+        payload = {
+            "parent": {"database_id": db_id},
+            "properties": {
+                "Activity": {"title": [{"text": {"content": activity}}]},
+                "Duration (min)": {"number": duration},
+                "Date": {"date": {"start": date.strftime("%Y-%m-%d")}}
+            }
+        }
+        return requests.post(url, headers=self.headers, json=payload)
 
-tab1, tab2 = st.tabs(["新增紀錄", "數據檢視"])
+# --- 初始化 ---
+st.set_page_config(page_title="Health Tracker", page_icon="💪")
 
-with tab1:
-    st.write("### 📝 紀錄今日飲食")
-    with st.form("food_form"):
-        food_name = st.text_input("食物名稱", placeholder="例如：雞胸肉沙拉")
-        calories = st.number_input("熱量 (kcal)", min_value=0, step=10)
-        date = st.date_input("日期", datetime.now())
+# 從 Secrets 安全取得資訊
+try:
+    notion = NotionClient(st.secrets["NOTION_TOKEN"])
+    FOOD_DB_ID = st.secrets["FOOD_DB_ID"]
+    WORKOUT_DB_ID = st.secrets["WORKOUT_DB_ID"]
+except KeyError:
+    st.error("請在 .streamlit/secrets.toml 中設定 API 資訊！")
+    st.stop()
+
+# --- 主介面 ---
+st.title("🏋️ 個人健康紀錄 App")
+st.markdown("---")
+
+# 使用側邊欄導覽
+choice = st.sidebar.radio("選擇功能", ["🥗 飲食紀錄", "🏃 運動紀錄"])
+
+if choice == "🥗 飲食紀錄":
+    st.header("新增飲食內容")
+    with st.form("food_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            name = st.text_input("食物名稱", placeholder="例如：雞胸肉便當")
+            date = st.date_input("紀錄日期", datetime.now())
+        with col2:
+            cals = st.number_input("預估熱量 (kcal)", min_value=0, step=50)
         
-        submit = st.form_submit_button("送出至 Notion")
+        submitted = st.form_submit_button("儲存至 Notion")
         
-        if submit:
-            if food_name:
-                status = insert_food_record(food_name, calories, date)
-                if status == 200:
-                    st.success(f"成功記錄：{food_name}！")
-                else:
-                    st.error(f"寫入失敗，錯誤碼：{status}")
+        if submitted:
+            if name:
+                with st.spinner("正在同步至 Notion..."):
+                    response = notion.add_food(FOOD_DB_ID, name, cals, date)
+                    if response.status_code == 200:
+                        st.success(f"✅ 已儲存：{name} ({cals} kcal)")
+                    else:
+                        st.error(f"儲存失敗：{response.text}")
             else:
-                st.warning("請輸入食物名稱")
+                st.warning("請填寫食物名稱")
 
-with tab2:
-    st.info("這裡可以串接 Notion Query API 來拉取歷史數據並顯示圖表。")
-    # 提示：可以使用 requests.post(f"https://api.notion.com/v1/databases/{FOOD_DB_ID}/query")
+elif choice == "🏃 運動紀錄":
+    st.header("新增運動項目")
+    with st.form("workout_form", clear_on_submit=True):
+        activity = st.text_input("運動項目", placeholder="例如：慢跑、重訓")
+        col1, col2 = st.columns(2)
+        with col1:
+            duration = st.number_input("時長 (分鐘)", min_value=1, step=5)
+        with col2:
+            date = st.date_input("紀錄日期", datetime.now())
+            
+        submitted = st.form_submit_button("儲存至 Notion")
+        
+        if submitted:
+            if activity:
+                with st.spinner("正在傳送數據..."):
+                    response = notion.add_workout(WORKOUT_DB_ID, activity, duration, date)
+                    if response.status_code == 200:
+                        st.success(f"🔥 太棒了！已完成 {duration} 分鐘的 {activity}")
+                    else:
+                        st.error(f"儲存失敗：{response.text}")
+            else:
+                st.warning("請填寫運動項目")
+
+# 頁尾資訊
+st.sidebar.markdown("---")
+st.sidebar.info("💡 提示：輸入完後資料會即時同步到你的 Notion 資料庫。")
