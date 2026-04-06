@@ -1,71 +1,84 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
+import pandas as pd
+from datetime import datetime
 
-# 建立連線
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- 頁面配置 ---
+st.set_page_config(page_title="Fitness Log", layout="wide")
 
-# 讀取（它會自動去 secrets 的 [connections.gsheets] 找 spreadsheet 網址）
-df = conn.read(ttl=0)
+# --- 日誌系統 ---
+if "logs" not in st.session_state:
+    st.session_state.logs = []
 
-# 更新
-# conn.update(data=your_new_df)
+def add_log(message, type="INFO"):
+    time_str = datetime.now().strftime("%H:%M:%S")
+    st.session_state.logs.append(f"[{time_str}] {type}: {message}")
+    if len(st.session_state.logs) > 15:
+        st.session_state.logs.pop(0)
 
+# --- 標題 ---
+st.title("💪 個人健康紀錄 App (GSheet 版)")
 
-    # 清理資料（移除全空的列）
-    #df = df.dropna(how="all")
-#
+# --- 建立連線 ---
+# 套件會自動讀取 secrets 中的 [connections.gsheets] 區塊
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    df = conn.read(ttl=0)
+    # 移除空行
+    df = df.dropna(how="all")
+except Exception as e:
+    st.error(f"連線失敗：{e}")
+    st.stop()
 
-# --- 4. 側邊欄：新增紀錄表單 ---
-st.sidebar.header("📝 新增紀錄")
-with st.sidebar.form("input_form", clear_on_submit=True):
-    date = st.date_input("日期", datetime.now())
-    category = st.selectbox("分類", ["🥗 飲食", "💪 運動"])
-    item = st.text_input("內容", placeholder="例如：雞胸肉、慢跑")
-    value = st.number_input("數值 (kcal / min)", min_value=0, step=1)
-    
-    submit = st.form_submit_button("儲存到雲端")
-    
-    if submit:
-        if item:
-            # 建立新列
-            new_data = pd.DataFrame([{
-                "日期": date.strftime("%Y-%m-%d"),
-                "項目": f"{category}: {item}",
-                "數值": value
-            }])
-            
-            # 合併舊資料與新資料
-            updated_df = pd.concat([df, new_data], ignore_index=True)
-            
-            # 寫回 Google Sheets
-            conn.update(spreadsheet=st.secrets["GSHEET_URL"], data=updated_df)
-            st.sidebar.success("✅ 已成功儲存！")
-            st.rerun() # 重新整理頁面以顯示新資料
-        else:
-            st.sidebar.warning("請填寫內容名稱")
+# --- UI 佈局 ---
+col_form, col_log = st.columns([2, 1])
 
-# --- 5. 主頁面：數據呈現 ---
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.subheader("📋 歷史紀錄清單")
-    if not df.empty:
-        # 倒序顯示，讓最新的在上面
-        st.dataframe(df.iloc[::-1], use_container_width=True)
-    else:
-        st.info("目前尚無資料，請從左側選單開始記錄！")
-
-with col2:
-    st.subheader("📊 快速統計")
-    if not df.empty:
-        # 計算今日總計
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        today_data = df[df['日期'] == today_str]
+with col_form:
+    st.subheader("📝 新增紀錄")
+    with st.form("main_form", clear_on_submit=True):
+        f_date = st.date_input("日期", datetime.now())
+        f_cat = st.selectbox("類別", ["🥗 飲食", "🏃 運動"])
+        f_item = st.text_input("內容 (例如：雞腿便當 / 游泳)")
+        f_val = st.number_input("數值 (kcal / 分鐘)", min_value=0)
         
-        total_kcal = today_data[today_data['項目'].str.contains("飲食")]['數值'].sum()
-        total_mins = today_data[today_data['項目'].str.contains("運動")]['數值'].sum()
+        submitted = st.form_submit_button("確認儲存")
         
-        st.metric("今日攝取", f"{total_kcal} kcal")
-        st.metric("今日運動", f"{total_mins} min")
-    else:
-        st.write("暫無統計數據")
+        if submitted:
+            if f_item:
+                add_log(f"正在嘗試寫入: {f_item}...")
+                try:
+                    # 建立新資料列
+                    new_row = pd.DataFrame([{
+                        "日期": f_date.strftime("%Y-%m-%d"),
+                        "項目": f"{f_cat}: {f_item}",
+                        "數值": f_val
+                    }])
+                    
+                    # 合併資料並寫回
+                    updated_df = pd.concat([df, new_row], ignore_index=True)
+                    conn.update(data=updated_df)
+                    
+                    add_log("✅ 寫入成功！", "SUCCESS")
+                    st.success("資料已儲存！")
+                    st.rerun()
+                except Exception as ex:
+                    add_log(f"❌ 寫入失敗: {ex}", "ERROR")
+                    st.error(f"寫入出錯：{ex}")
+            else:
+                st.warning("請填寫內容標題")
+
+    st.divider()
+    st.subheader("📋 最近紀錄")
+    st.dataframe(df.tail(10), use_container_width=True)
+
+with col_log:
+    st.subheader("📜 執行日誌")
+    if st.button("清除日誌"):
+        st.session_state.logs = []
+        st.rerun()
+    
+    # 倒序顯示最新的 Log
+    log_content = "\n".join(st.session_state.logs[::-1])
+    st.code(log_content if log_content else "等待操作中...", language="text")
+
+    st.info("💡 提示：若寫入失敗，請確認 Service Account 已被加入表格的『編輯者』共用名單。")
