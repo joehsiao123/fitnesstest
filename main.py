@@ -1,26 +1,22 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
-import pandas as pd
-from datetime import datetime
 
-st.title("🍎 簡易健康紀錄器")
-
-# 建立 Google Sheets 連線
+# 建立連線
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 讀取現有資料
-data = conn.read(spreadsheet=st.secrets["GSHEET_URL"])
-data = data.dropna(how="all") # 清除空行
-
-# --- 輸入介面 ---
-with st.form("record_form", clear_on_submit=True):
-    date = st.date_input("日期", datetime.now())
-    category = st.selectbox("類別", ["飲食 (kcal)", "運動 (min)"])
-    item = st.text_input("內容 (例如: 雞腿便當 / 慢跑)")
-    value = st.number_input("數值", min_value=0)
+try:
+    # 讀取資料
+    df = conn.read(
+        spreadsheet=st.secrets["GSHEET_URL"],
+        ttl=0  # 禁用快取，確保即時讀取
+    )
     
-#
+    if df.empty:
+        st.warning("表格目前是空的！請先在 Google Sheet 第一列填入標題（例如：日期, 項目, 數值）")
+    else:
+        st.write("### 成功讀取資料：")
+        st.dataframe(df)
 
-# --- 顯示最近 5 筆紀錄 ---
-st.write("### 📝 最近紀錄")
-st.table(data.tail(5))
+except Exception as e:
+    st.error(f"❌ 讀取失敗。請確認 secrets.toml 中的 GSHEET_URL 是否正確。")
+    st.info(f"詳細錯誤訊息: {e}")
