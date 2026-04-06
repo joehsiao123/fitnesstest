@@ -9,8 +9,10 @@ st.title("🍎 飲食運動永久記錄器")
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 2. 讀取現有資料 (為了顯示歷史紀錄)
-existing_data = conn.read(worksheet="Sheet1", usecols=[0, 1, 2, 3], ttl=5)
-existing_data = existing_data.dropna(how="all")
+# existing_data = conn.read(worksheet="Sheet1", usecols=[0, 1, 2, 3], ttl=5)
+# existing_data = existing_data.dropna(how="all")
+existing_data = conn.read() 
+st.write(existing_data)
 
 # 3. 輸入介面
 with st.form("record_form"):
