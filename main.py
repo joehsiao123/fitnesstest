@@ -11,6 +11,8 @@ try:
 except Exception as e:
     st.error("❌ Secrets 載入失敗，請檢查 .streamlit/secrets.toml")
     st.stop()
+# 僅供偵錯，確認完請刪除！
+st.write(f"目前讀取的 Token 前 10 碼: {NOTION_TOKEN[:10]}...")
 
 # --- 2. 日誌紀錄系統 ---
 if "logs" not in st.session_state:
