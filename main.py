@@ -9,7 +9,7 @@ st.title("🍎 簡易健康紀錄器")
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 讀取現有資料
-data = conn.read(spreadsheet=st.secrets["GSHEET_URL"], usecols=[0, 1, 2])
+data = conn.read(spreadsheet=st.secrets["GSHEET_URL"])
 data = data.dropna(how="all") # 清除空行
 
 # --- 輸入介面 ---
