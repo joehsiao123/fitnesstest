@@ -4,108 +4,131 @@ import pandas as pd
 from datetime import datetime
 
 # --- 頁面配置 ---
-st.set_page_config(page_title="Fitness Pro", layout="wide", page_icon="💪")
+st.set_page_config(page_title="Health Log Pro", layout="wide", page_icon="🥗")
 
 # --- 核心連線 ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     df = conn.read(ttl=0).dropna(how="all")
 except Exception as e:
-    st.error(f"連線失敗，請檢查 Secrets 設定：{e}")
+    st.error(f"連線失敗：{e}")
     st.stop()
 
-# --- 健身項目配置 (中文字卡與圖示) ---
-EXERCISES = {
-    "🏃 慢跑": 400,    # 每 30 分鐘估計消耗
-    "🚴 單車": 300,
-    "🏊 游泳": 500,
-    "🏋️ 重訓": 250,
-    "🧘 瑜珈": 150,
-    "🏸 羽球": 350,
-    "🥊 拳擊": 600,
+# --- 數據庫配置 (熱門項目與預估值) ---
+# 飲食：參考台灣常見外食熱量
+FOOD_ITEMS = {
+    "🍱 便當/定食": 750,
+    "🍜 湯麵/拉麵": 600,
+    "🥪 三明治/飯糰": 350,
+    "🥗 沙拉/輕食": 250,
+    "🥟 水餃/鍋貼": 500,
+    "🍔 漢堡/速食": 800,
+    "☕ 咖啡/拿鐵": 150,
+    "🧋 珍珠奶茶": 650,
+    "🍎 水果/點心": 150,
+    "🥩 火鍋/燒肉": 900
+}
+
+# 運動：每 30 分鐘消耗量
+WORKOUT_ITEMS = {
+    "🏃 慢跑": 300,
+    "🏋️ 重訓": 200,
+    "🧘 瑜珈/伸展": 120,
+    "🚴 單車/飛輪": 250,
+    "🏊 游泳": 400,
     "🚶 散步": 100
 }
 
 # --- 標題 ---
-st.title("💪 個人健康紀錄中心")
+st.title("💪 飲食與運動全能紀錄")
 
 # --- UI 佈局 ---
-col_form, col_stat = st.columns([3, 2])
+col_form, col_view = st.columns([3, 2])
 
 with col_form:
-    st.subheader("📝 快速新增")
+    st.subheader("📝 快速新增紀錄")
     
-    # 使用 Radio 製作視覺化卡路里選擇器 (水平排列適合 iPad)
-    st.write("**1. 選擇健身項目**")
-    selected_exercise = st.radio(
-        "健身類別", 
-        options=list(EXERCISES.keys()), 
-        horizontal=True,
+    # 1. 大類別切換
+    log_type = st.radio("想要記錄什麼？", ["🥗 飲食紀錄", "🏃 運動紀錄"], horizontal=True)
+    
+    # 2. 根據大類別顯示對應字卡
+    current_items = FOOD_ITEMS if "飲食" in log_type else WORKOUT_ITEMS
+    
+    st.write("**點選常用項目：**")
+    selected_item = st.selectbox(
+        "選擇項目", 
+        options=list(current_items.keys()),
         label_visibility="collapsed"
     )
     
-    with st.form("quick_add_form", clear_on_submit=True):
+    # 3. 表單填寫
+    with st.form("entry_form", clear_on_submit=True):
         f_date = st.date_input("日期", datetime.now())
         
         c1, c2 = st.columns(2)
         with c1:
-            # 根據選擇的項目自動預填卡路里
-            base_kcal = EXERCISES[selected_exercise]
-            f_val = st.number_input("消耗卡路里 (kcal)", min_value=0, value=base_kcal)
+            # 自動連動預設值
+            default_val = current_items[selected_item]
+            f_val = st.number_input("熱量 (kcal)", min_value=0, value=default_val)
         with c2:
-            f_duration = st.number_input("運動時長 (分鐘)", min_value=0, value=30)
+            f_label = "份量/備註" if "飲食" in log_type else "時長(分鐘)"
+            f_note = st.text_input(f_label, placeholder="選填")
             
-        f_note = st.text_input("補充筆記 (選填)", placeholder="例如：今天體感很好")
-        
         submitted = st.form_submit_button("🔥 確認存入 Google Sheets", use_container_width=True)
         
         if submitted:
-            with st.spinner("同步至雲端..."):
-                try:
-                    # 建立新資料
-                    new_row = pd.DataFrame([{
-                        "日期": f_date.strftime("%Y-%m-%d"),
-                        "項目": f"{selected_exercise} ({f_duration}min)",
-                        "數值": f_val,
-                        "備註": f_note
-                    }])
-                    
-                    # 合併並更新
-                    updated_df = pd.concat([df, new_row], ignore_index=True)
-                    conn.update(data=updated_df)
-                    
-                    st.success(f"成功記錄 {selected_exercise}！消耗 {f_val} kcal")
-                    st.balloons()
-                    # 重新整理頁面顯示最新數據
-                    st.rerun()
-                except Exception as ex:
-                    st.error(f"寫入失敗：{ex}")
+            try:
+                # 統一寫入格式
+                new_row = pd.DataFrame([{
+                    "日期": f_date.strftime("%Y-%m-%d"),
+                    "類別": log_type,
+                    "項目": selected_item,
+                    "數值": f_val,
+                    "備註": f_note
+                }])
+                
+                updated_df = pd.concat([df, new_row], ignore_index=True)
+                conn.update(data=updated_df)
+                st.success(f"已記錄：{selected_item}")
+                st.balloons()
+                st.rerun()
+            except Exception as ex:
+                st.error(f"寫入失敗：{ex}")
 
-with col_stat:
-    st.subheader("📊 本週統計")
-    # 簡易數據展示
+with col_view:
+    st.subheader("📊 今日概覽")
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
     if not df.empty:
-        # 確保數值欄位是數字
-        df['數值'] = pd.to_numeric(df['數值'], errors='coerce')
-        total_kcal = df['數值'].sum()
-        st.metric("總計消耗卡路里", f"{int(total_kcal)} kcal", delta="Keep going!")
+        # 篩選今日數據
+        today_df = df[df['日期'] == today_str].copy()
+        today_df['數值'] = pd.to_numeric(today_df['數值'], errors='coerce')
+        
+        in_kcal = today_df[today_df['類別'].str.contains("飲食")]['數值'].sum()
+        out_kcal = today_df[today_df['類別'].str.contains("運動")]['數值'].sum()
+        
+        st.metric("今日攝取 (In)", f"{int(in_kcal)} kcal")
+        st.metric("今日消耗 (Out)", f"{int(out_kcal)} kcal")
+        st.metric("淨值", f"{int(in_kcal - out_kcal)} kcal", delta_color="inverse")
         
         st.divider()
-        st.write("**最近 5 筆動態**")
-        st.dataframe(df.tail(5), use_container_width=True, hide_index=True)
+        st.write("**最近紀錄**")
+        st.dataframe(df.tail(8), use_container_width=True, hide_index=True)
     else:
-        st.info("尚無紀錄，開始你的第一次運動吧！")
+        st.info("尚無數據")
 
-# --- 底部視覺化卡片 ---
+# --- 視覺化字卡展示 ---
 st.divider()
-st.subheader("💡 健身建議 (參考)")
-cols = st.columns(len(EXERCISES))
-for i, (name, kcal) in enumerate(EXERCISES.items()):
-    with cols[i]:
+st.subheader("💡 常用項目快速參考")
+display_cols = st.columns(5)
+all_items = list(FOOD_ITEMS.items())[:10] # 顯示前10項飲食
+
+for i, (name, kcal) in enumerate(all_items):
+    with display_cols[i % 5]:
         st.markdown(f"""
-        <div style="border:1px solid #ddd; border-radius:10px; padding:10px; text-align:center; background-color:#f9f9f9;">
-            <h2 style="margin:0;">{name.split()[0]}</h2>
-            <p style="margin:0; font-size:14px; color:#666;">{name.split()[1]}</p>
-            <b style="color:#ff4b4b;">{kcal} kcal</b>
+        <div style="border:1px solid #eee; border-radius:10px; padding:10px; text-align:center; margin-bottom:10px;">
+            <div style="font-size:24px;">{name.split()[0]}</div>
+            <div style="font-weight:bold;">{name.split()[1]}</div>
+            <div style="color:#ff4b4b;">{kcal} kcal</div>
         </div>
         """, unsafe_allow_html=True)
