@@ -2,3 +2,4 @@ streamlit
 notion-client
 st-gsheets-connection
 pandas
+plotly
